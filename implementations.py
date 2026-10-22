@@ -313,48 +313,20 @@ def calculate_hessian(y, tx, w):
 	return 1/N * tx.T.dot(S).dot(tx)
 
 	
-def logistic_regression_step(y, tx, w, gamma):
-	"""
-	Do one step of gradient descent using logistic regression. Return the loss and the updated w.
-
-	Args:
-		y:  shape=(N, )
-		tx: shape=(N, D)
-		w:  shape=(D, )
-		gamma: float
-
-	Returns:
-		loss: scalar number
-		w: shape=(D, 1)
-
-	>>> y = np.c_[[0., 1.]]
-	>>> tx = np.arange(6).reshape(2, 3)
-	>>> w = np.array([[0.1], [0.2], [0.3]])
-	>>> gamma = 0.1
-	>>> loss, w = learning_by_gradient_descent(y, tx, w, gamma)
-	>>> round(loss, 8)
-	0.62137268
-	>>> w
-	array([[0.11037076],
-		   [0.17932896],
-		   [0.24828716]])
-	"""
-
-	loss = neg_log_likelihood(y=y, tx=tx, w=w)
-	w -= compute_neg_log_gradient(y=y,tx=tx, w=w)*gamma
-	return loss, w
 
 def logistic_regression(y, tx, initial_w, max_iters, gamma):
 	# init parameters
 	threshold=1e-8
 	losses = []
 
+	loss = 0
 	w = initial_w
 
 	# start the logistic regression
 	for iter in range(max_iters):
 		# get loss and update w.
-		loss, w = logistic_regression_step(y, tx, w, gamma)
+		loss = neg_log_likelihood(y=y, tx=tx, w=w)
+		w -= compute_neg_log_gradient(y=y,tx=tx, w=w)*gamma
 		# log info
 		if iter % 100 == 0:
 			print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
@@ -375,6 +347,8 @@ def logistic_regression(y, tx, initial_w, max_iters, gamma):
 	)
 	"""
 	print("loss={l}".format(l=neg_log_likelihood(y, tx, w)))
+
+	return w,loss
 
 
 def reg_logistic_regression_step(y, tx, w, gamma, lambda_):
@@ -411,7 +385,7 @@ def reg_logistic_regression_step(y, tx, w, gamma, lambda_):
 	loss = neg_log_likelihood(y=y, tx=tx, w=w)
 	gd = compute_neg_log_gradient(y=y, tx=tx, w=w) + 2*lambda_*w
 	w -= gamma*gd
-	return loss, w
+	return w,loss
 
 def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters=10000, gamma=0.5):
 	# init parameters
@@ -419,13 +393,15 @@ def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters=10000, gamma=0.
 	threshold = 1e-8
 	losses = []
 
-	# build tx
+	loss = 0
 	w = initial_w
 
 	# start the logistic regression
 	for iter in range(max_iters):
 		# get loss and update w.
-		loss, w = reg_logistic_regression_step(y, tx, w, gamma, lambda_)
+		loss = neg_log_likelihood(y=y, tx=tx, w=w)
+		gd = compute_neg_log_gradient(y=y, tx=tx, w=w) + 2*lambda_*w
+		w -= gamma*gd
 		# log info
 		if iter % 100 == 0:
 			print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
@@ -446,3 +422,5 @@ def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters=10000, gamma=0.
 	)
 	"""
 	print("loss={l}".format(l=neg_log_likelihood(y, tx, w)))
+
+	return w, loss
