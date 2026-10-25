@@ -21,7 +21,7 @@ def predict(tx, w):
 
 	returns : y (N,) the vector of predictions
 	"""
-	return -np.sign(tx.dot(w))
+	return np.sign(tx.dot(w))
 
 def main():
 	"""
