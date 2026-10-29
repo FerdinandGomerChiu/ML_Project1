@@ -121,7 +121,7 @@ def main():
 	tx_test = format_x(x_test_imputed)
 	y_pred = predict(tx_test, w)
 	
-	#create_csv_submission(ids=train_ids, y_pred=y_pred, name='predictions')
+	create_csv_submission(ids=test_ids, y_pred=y_pred, name='predictions.csv')
 
 	return
 
