@@ -10,8 +10,8 @@ DATA_PATH = DATASET_FOLDER_NAME
 K_FOLD = 5
 CV_SEED = 12
 MAX_ITERS = 300
-GAMMA = 0.0000000001
-LAMBDA = 0.5
+GAMMA = 0.02
+LAMBDA = 0.001
 
 def format_x(x):
 	"""
@@ -28,7 +28,18 @@ def predict(tx, w):
 
 	returns : y (N,) the vector of predictions
 	"""
-	return np.sign(tx.dot(w))
+	return np.where(tx.dot(w) >= 0, 1, -1)
+
+def impute_and_standardize(x_train, x_other):
+	"""Impute with training medians and standardize using training statistics."""
+	medians = np.nanmedian(x_train, axis=0)
+	x_train = np.where(np.isnan(x_train), medians, x_train)
+	x_other = np.where(np.isnan(x_other), medians, x_other)
+
+	means = np.mean(x_train, axis=0)
+	scales = np.std(x_train, axis=0)
+	scales[scales == 0] = 1
+	return (x_train - means) / scales, (x_other - means) / scales
 
 
 def build_k_indices(y, k_fold, seed):
@@ -41,10 +52,7 @@ def build_k_indices(y, k_fold, seed):
 
 
 def cross_validation(y, x, k_indices, k, lambda_, max_iters, gamma):
-	"""Fit regularized logistic regression and return accuracy on fold k.
-	returns: w (D,): weights
-			 accuracy: accuracy of this batch
-	"""
+	"""Fit regularized logistic regression and return accuracy on fold k."""
 	if k < 0 or k >= len(k_indices):
 		raise ValueError("k must identify a fold in k_indices")
 
@@ -57,9 +65,7 @@ def cross_validation(y, x, k_indices, k, lambda_, max_iters, gamma):
 	y_train = y[training_indices]
 	y_validation = y[validation_indices]
 
-	medians = np.nanmedian(x_train, axis=0)
-	x_train = np.where(np.isnan(x_train), medians, x_train)
-	x_validation = np.where(np.isnan(x_validation), medians, x_validation)
+	x_train, x_validation = impute_and_standardize(x_train, x_validation)
 	tx_train = format_x(x_train)
 	tx_validation = format_x(x_validation)
 
@@ -73,7 +79,7 @@ def cross_validation(y, x, k_indices, k, lambda_, max_iters, gamma):
 		gamma=gamma,
 	)
 	predictions = (tx_validation.dot(w) >= 0).astype(float)
-	return w, np.mean(predictions == y_validation)
+	return np.mean(predictions == y_validation)
 
 
 def main():
@@ -85,30 +91,32 @@ def main():
 	print("Loaded csv data.")
 	y_train = (y_train == 1).astype(float)
 
-	x_train_format = x_train[:, 20:]
-
 	print(f"Running {K_FOLD}-fold cross-validation...")
 	k_indices = build_k_indices(y_train, K_FOLD, CV_SEED)
-	fold_accuracies = []
-	weights_matrix = np.zeros((x_train_format.shape[1] + 1, K_FOLD)) 
-	for k in range(K_FOLD):
-		w, accuracy = cross_validation(
-			y_train, x_train_format, k_indices, k, LAMBDA, MAX_ITERS, GAMMA
+	fold_accuracies = [
+		cross_validation(
+			y_train, x_train, k_indices, k, LAMBDA, MAX_ITERS, GAMMA
 		)
-		fold_accuracies.append(accuracy)
-		weights_matrix[:,k] = w
-	
+		for k in range(K_FOLD)
+	]
 	for fold, accuracy in enumerate(fold_accuracies, start=1):
 		print(f"Fold {fold} validation accuracy: {accuracy:.4f}")
 	print(f"Mean validation accuracy: {np.mean(fold_accuracies):.4f}")
-	final_w = np.mean(weights_matrix, axis=1)
 
-	
-	x_test_format = x_test[:, 20:]
-	medians = np.nanmedian(x_test_format, axis=0)
+	x_train, x_test = impute_and_standardize(x_train, x_test)
+	tx_train = format_x(x_train)
+	tx_test = format_x(x_test)
+	initial_w = np.zeros(tx_train.shape[1])
+	final_w, loss = reg_logistic_regression(
+		y=y_train,
+		tx=tx_train,
+		lambda_=LAMBDA,
+		initial_w=initial_w,
+		max_iters=MAX_ITERS,
+		gamma=GAMMA,
+	)
+	print(f"Final training loss: {loss}")
 
-	x_test_imputed = np.where(np.isnan(x_test_format), medians, x_test_format)
-	tx_test = format_x(x_test_imputed)
 	y_pred = predict(tx_test, final_w)
 	
 	create_csv_submission(ids=test_ids, y_pred=y_pred, name='predictions.csv')
