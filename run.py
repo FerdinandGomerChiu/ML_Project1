@@ -41,7 +41,10 @@ def build_k_indices(y, k_fold, seed):
 
 
 def cross_validation(y, x, k_indices, k, lambda_, max_iters, gamma):
-	"""Fit regularized logistic regression and return accuracy on fold k."""
+	"""Fit regularized logistic regression and return accuracy on fold k.
+	returns: w (D,): weights
+			 accuracy: accuracy of this batch
+	"""
 	if k < 0 or k >= len(k_indices):
 		raise ValueError("k must identify a fold in k_indices")
 
@@ -70,7 +73,7 @@ def cross_validation(y, x, k_indices, k, lambda_, max_iters, gamma):
 		gamma=gamma,
 	)
 	predictions = (tx_validation.dot(w) >= 0).astype(float)
-	return np.mean(predictions == y_validation)
+	return w, np.mean(predictions == y_validation)
 
 
 def main():
@@ -82,44 +85,31 @@ def main():
 	print("Loaded csv data.")
 	y_train = (y_train == 1).astype(float)
 
-	# I believe the first 20 columns are ids and shouldn't be present in the training data
-	# I didn't check the other columns so there might be more
 	x_train_format = x_train[:, 20:]
 
 	print(f"Running {K_FOLD}-fold cross-validation...")
 	k_indices = build_k_indices(y_train, K_FOLD, CV_SEED)
-	fold_accuracies = [
-		cross_validation(
+	fold_accuracies = []
+	weights_matrix = np.zeros((x_train_format.shape[1] + 1, K_FOLD)) 
+	for k in range(K_FOLD):
+		w, accuracy = cross_validation(
 			y_train, x_train_format, k_indices, k, LAMBDA, MAX_ITERS, GAMMA
 		)
-		for k in range(K_FOLD)
-	]
+		fold_accuracies.append(accuracy)
+		weights_matrix[:,k] = w
+	
 	for fold, accuracy in enumerate(fold_accuracies, start=1):
 		print(f"Fold {fold} validation accuracy: {accuracy:.4f}")
 	print(f"Mean validation accuracy: {np.mean(fold_accuracies):.4f}")
-
-	medians = np.nanmedian(x_train_format, axis=0)
-	x_imputed = np.where(np.isnan(x_train_format), medians, x_train_format)
-	tx_train = format_x(x_imputed)
-	D = tx_train.shape[1]
-	initial_w = np.zeros(D)
-
-	print("Training...")
-
-	# we'll choose the best method
-
-	#w, loss = mean_squared_error_sgd(y=y_train, tx=tx_train, initial_w=initial_w, max_iters=max_iters, gamma=gamma)
-	w, loss = reg_logistic_regression(y=y_train, tx=tx_train, initial_w=initial_w, max_iters=MAX_ITERS, gamma=GAMMA, lambda_=LAMBDA)
-	#w, loss = logistic_regression(y=y_train, tx=tx_train, initial_w=initial_w, max_iters=max_iters, gamma=gamma)
-
-	print(f"final weigths : {w}")
-	print(f"final loss : {loss}")
+	final_w = np.mean(weights_matrix, axis=1)
 
 	
 	x_test_format = x_test[:, 20:]
+	medians = np.nanmedian(x_test_format, axis=0)
+
 	x_test_imputed = np.where(np.isnan(x_test_format), medians, x_test_format)
 	tx_test = format_x(x_test_imputed)
-	y_pred = predict(tx_test, w)
+	y_pred = predict(tx_test, final_w)
 	
 	create_csv_submission(ids=test_ids, y_pred=y_pred, name='predictions.csv')
 
